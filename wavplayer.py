@@ -32,7 +32,6 @@ def main(fname):
     ' ', progressbar.Bar(marker=progressbar.RotatingMarker()),
     ' ', progressbar.ETA(), ' ', progressbar.FileTransferSpeed()]
   pgs = progressbar.ProgressBar(widgets=widgets, maxval=nframes).start()
-  pause = False
   # while True:
   #   data = wf.readframes(chunk)
   #   if data is None or data == '': break
@@ -40,17 +39,22 @@ def main(fname):
     try:
       count += len(data) / nb
       pgs.update(count)
-      #while True:
       s = rt.get_nonblocking()
       if len(s) > 0:
         c = s[0]
         if c in '\x03\x1b\x20': rt.skip.set()
         if c in 'FfLl': continue
-        if c in 'Pp': pause = True
-        if c in 'Qq': pause = False
+        if c in 'Pp':
+          while True:
+            time.sleep(0.04) # 40ms
+            ss = rt.get_nonblocking()
+            if len(ss) > 0:
+              cc = ss[0]
+              if cc in '\x03\x1b\x20':
+                rt.skip.set()
+                break
+              if cc in 'Qq': break
       if rt.skip.isSet(): break
-      #if not pause: break
-      #time.sleep(0.04) # 40ms
       stream.write(data)
     except KeyboardInterrupt, e:
       rt.skip.set()
