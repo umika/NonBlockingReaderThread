@@ -5,27 +5,17 @@ Play a WAVE file.
 '''
 
 import sys, os, locale
+import time
 import wave
 import pyaudio
 import progressbar
-import threading
+from NonBlockingReaderThread import NonBlockingReaderThread
 
 chunk = 1024
-skip = threading.Event()
-
-def worker():
-  skip.clear()
-  fd = sys.stdin.fileno()
-  while not skip.isSet():
-    s = os.read(fd, 1) # DO NOT use sys.stdin.read(), it is buffered
-    if s is None: continue
-    if len(s) > 0 and s[0] == chr(3): break
-  skip.set()
 
 def main(fname):
   preenc = locale.getpreferredencoding()
-  rt = threading.Thread(target=worker)
-  rt.setDaemon(True) # to terminate this thread with the process
+  rt = NonBlockingReaderThread(sys.stdin)
   rt.start()
   wf = wave.open(fname, 'rb')
   p = pyaudio.PyAudio()
@@ -42,6 +32,7 @@ def main(fname):
     ' ', progressbar.Bar(marker=progressbar.RotatingMarker()),
     ' ', progressbar.ETA(), ' ', progressbar.FileTransferSpeed()]
   pgs = progressbar.ProgressBar(widgets=widgets, maxval=nframes).start()
+  pause = False
   # while True:
   #   data = wf.readframes(chunk)
   #   if data is None or data == '': break
@@ -49,16 +40,25 @@ def main(fname):
     try:
       count += len(data) / nb
       pgs.update(count)
+      #while True:
+      s = rt.get_nonblocking()
+      if len(s) > 0:
+        c = s[0]
+        if c in '\x03\x1b\x20': rt.skip.set()
+        if c in 'FfLl': continue
+        if c in 'Pp': pause = True
+        if c in 'Qq': pause = False
+      if rt.skip.isSet(): break
+      #if not pause: break
+      #time.sleep(0.04) # 40ms
       stream.write(data)
     except KeyboardInterrupt, e:
-      skip.set()
-    if skip.isSet(): break
+      rt.skip.set()
   pgs.finish()
   stream.close()
   p.terminate()
   wf.close()
-  skip.set()
-  rt._Thread__stop()
+  rt.finalize()
 
 if __name__ == '__main__':
   if len(sys.argv) < 2:

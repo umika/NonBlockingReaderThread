@@ -10,20 +10,21 @@ PyAudio/sample01.py の方に問題あるのかも -> wavplayer.py に変更
 
 Python 2.7 以上だと os.kill(p.pid, signal.CTRL_C_EVENT) も使える
 
-ESC -> skip and stop    -> send chr(3)  ^C
-' ' -> skip             -> send chr(3)  ^C
-'p' -> pause            -> send chr(19) ^S
-'q' -> play             -> send chr(17) ^Q
+ESC -> skip and stop    -> send chr(3) ^C
+' ' -> skip             -> send chr(3) ^C
+'p' -> pause
+'q' -> play
+'r' -> rew(rewind)
+'f' -> ff(fast-forward)
 'h' -> head
 'j' -> next
 'k' -> back
-'l' -> tail ?
-'r' -> rew (rewind)
-'f' -> ff (fast forward)
-'s' -> shuffle / random
+'l' -> tail
+'s' -> shuffle(random)
 '''
 
 import sys, os, locale
+import random
 import subprocess
 import msvcrt
 
@@ -38,8 +39,12 @@ def kill_process(pid):
 
 def main():
   preenc = locale.getpreferredencoding()
+  lst = [fn for fn in os.listdir(u'./') if fn[-4:].upper() == u'.WAV']
+  shuffle = False
   stop = False
-  for fname in [fn for fn in os.listdir(u'./') if fn[-4:].upper() == u'.WAV']:
+  cur = 0
+  while True:
+    fname = lst[cur]
     cmd = [PLAYER, fname] # os.path.join(u'.', fname)
     p = subprocess.Popen([s.encode(preenc) for s in cmd],
       bufsize=4096, stdin=subprocess.PIPE,
@@ -61,8 +66,21 @@ def main():
         c = msvcrt.getch()
         if c == chr(27): stop = True
         elif c == chr(32): skip = True
+        elif c in 'Jj':
+          if cur < len(lst) - 1: skip = True
+        elif c in 'Kk':
+          if cur > 0: skip, cur = True, cur - 2
+        elif c in 'PpQqRrFfHhLl':
+          p.stdin.write(c)
+          p.stdin.flush()
+        elif c in 'Ss': shuffle = not shuffle
       if p.poll() is not None: break
     if stop: break
+    if shuffle:
+      cur = random.randint(0, len(lst) - 1)
+    else:
+      cur += 1
+      if cur >= len(lst): break
 
 if __name__ == '__main__':
   main()
